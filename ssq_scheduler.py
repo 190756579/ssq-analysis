@@ -14,7 +14,7 @@ import random
 import os
 from datetime import datetime, timezone, timedelta
 
-# ============ SMTP 配置（优先读环境变量，本地用默认值）============
+# =========== SMTP 配置（优先读环境变量，本地用默认值）============
 SMTP_USER = os.environ.get('SMTP_USER', '190756579@qq.com')
 SMTP_PASS = os.environ.get('SMTP_PASS', 'mbvvsscxcgykbiei')
 SMTP_SERVER = 'smtp.qq.com'
@@ -22,7 +22,7 @@ SMTP_PORT = 465  # SSL
 
 REPORT_PATH = 'ssq_report.html'  # GitHub Actions 用相对路径
 
-# ============ 1. 抓取最新开奖数据 ============
+# =========== 1. 抓取最新开奖数据 ===========
 def fetch_ssq_data():
     """从500彩票网抓取双色球近100期数据"""
     url = "http://datachart.500star.com/ssq/history/history.shtml"
@@ -36,8 +36,9 @@ def fetch_ssq_data():
         print(f"抓取失败: {e}")
         return None
 
-    # 解析开奖号码
-    pattern = r'(\d{7}).*?(\d{2})\s+(\d{2})\s+(\d{2})\s+(\d{2})\s+(\d{2})\s+(\d{2}).*?(\d{2})'
+    # 解析开奖号码 - 修正正则：期号后跟6个红球1个蓝球
+    # 500彩票网格式：期号  红球1 红球2 ... 红球6  蓝球
+    pattern = r'(\d{7})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})'
     matches = re.findall(pattern, html)
 
     data = []
@@ -49,7 +50,7 @@ def fetch_ssq_data():
 
     return data
 
-# ============ 2. 概率分析 ============
+# =========== 2. 概率分析 ===========
 def analyze(data):
     """分析概率，生成5组推荐号码"""
     red_counter = Counter()
@@ -125,7 +126,7 @@ def analyze(data):
 
     return recommendations, red_counter, blue_counter
 
-# ============ 3. 生成邮件内容 ============
+# =========== 3. 生成邮件内容 ===========
 def build_email(recommendations, red_counter, blue_counter, data):
     """构建邮件HTML内容"""
     total = len(data)
@@ -188,7 +189,7 @@ def build_email(recommendations, red_counter, blue_counter, data):
 
     return html
 
-# ============ 4. 发送邮件 ============
+# =========== 4. 发送邮件 ===========
 def send_email(html_content):
     """发送邮件到 190756579@qq.com"""
     msg = MIMEMultipart('alternative')
@@ -206,17 +207,17 @@ def send_email(html_content):
 
     # 发送邮件
     try:
-        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=30)
         server.login(SMTP_USER, SMTP_PASS)
-        server.sendmail(SMTP_USER, '190756579@qq.com', msg.as_string())
+        server.sendmail(SMTP_USER, ['190756579@qq.com'], msg.as_string())
         server.quit()
         print("Email sent successfully!")
+        return True
     except Exception as e:
         print(f"Email send failed: {e}")
+        return False
 
-    return REPORT_PATH
-
-# ============ 主流程 ============
+# =========== 主流程 ===========
 if __name__ == '__main__':
     print("Fetching SSQ data...")
     data = fetch_ssq_data()
@@ -338,5 +339,9 @@ if __name__ == '__main__':
         print(f"  Group {i} [{strategy}]: Red={red_str} Blue={blue:02d}")
 
     html = build_email(recommendations, red_counter, blue_counter, data)
-    report_path = send_email(html)
-    print(f"\nDone! Report: {report_path}")
+    success = send_email(html)
+    
+    if success:
+        print("\nDone! Email sent and report saved.")
+    else:
+        print("\nDone! Report saved but email failed.")
